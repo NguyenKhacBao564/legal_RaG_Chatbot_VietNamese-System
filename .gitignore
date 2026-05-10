@@ -1,0 +1,118 @@
+# Local secrets and environment files
+.env
+.env.*
+!.env.template
+!.env.example
+!.env.*.template
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Jupyter and notebooks runtime
+.ipynb_checkpoints/
+
+# Logs and runtime files
+*.log
+logs/
+*.pid
+celerybeat-schedule
+celerybeat.pid
+
+# Docker and local volumes
+docker-data/
+volumes/
+data/mysql/
+data/qdrant/
+data/redis/
+data/valkey/
+
+# Databases and local state
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+# Datasets and generated indexes
+backend/data/
+data/
+datasets/
+*.jsonl
+*.parquet
+*.arrow
+*.feather
+*.pkl
+*.pickle
+*.joblib
+*.npy
+*.npz
+
+# Model artifacts and checkpoints
+models/
+model_store/
+checkpoints/
+outputs/
+runs/
+wandb/
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.gguf
+*.ckpt
+
+# Large media/demo artifacts
+asset/*.mkv
+asset/*.mp4
+asset/*.mov
+asset/*.avi
+asset/*.gif
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Node/frontend
+node_modules/
+.next/
+dist/
+build/
+
+# IDE and OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Tooling caches
+.cache/
+.tox/
+.nox/
+site/
+docs/_build/
