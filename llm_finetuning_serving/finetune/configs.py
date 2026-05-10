@@ -57,6 +57,7 @@ class H200OptimizedConfig:
     # Output
     output_dir: str = "./outputs"
     run_name: str = f"vietnamese-legal-llama-h200-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    save_method: str = "merged_16bit"
 
 @dataclass
 class RTX3090TiOptimizedConfig:
@@ -105,6 +106,7 @@ class RTX3090TiOptimizedConfig:
 
     output_dir: str = "./outputs"
     run_name: str = f"vietnamese-legal-llama-3090ti-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    save_method: str = "lora"
 
 def get_config(gpu_type: str = "h200"):
     """Get configuration based on GPU type"""

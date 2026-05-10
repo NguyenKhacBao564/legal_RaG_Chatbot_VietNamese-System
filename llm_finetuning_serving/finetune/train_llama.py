@@ -102,13 +102,22 @@ class LlamaFineTuner:
     def load_model(self):
         """Load and setup model with Unsloth optimizations"""
         logger.info(f"🦥 Loading Unsloth model: {self.config.model_name}")
+
+        attn_implementation = os.getenv("ATTN_IMPLEMENTATION")
+        if not attn_implementation:
+            try:
+                import flash_attn  # noqa: F401
+                attn_implementation = "flash_attention_2"
+            except ImportError:
+                attn_implementation = "sdpa"
+        logger.info(f"Using attention implementation: {attn_implementation}")
         
         self.model, self.tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.config.model_name,
             max_seq_length=self.config.max_seq_length,
             dtype=self.config.dtype,  
             load_in_4bit=self.config.load_in_4bit,
-            attn_implementation="flash_attention_2",  
+            attn_implementation=attn_implementation,
             device_map="auto",  
         )
         
@@ -381,8 +390,13 @@ You are a helpful assistant that answers questions about Vietnamese law.<|eot_id
         
         return trainer_stats
     
-    def save_model(self, save_method: str = "merged_16bit"):
+    def save_model(self, save_method: Optional[str] = None):
         """Save the fine-tuned model and upload to Digital Ocean Spaces"""
+        save_method = save_method or getattr(
+            self.config,
+            "save_method",
+            "lora" if self.config.load_in_4bit else "merged_16bit",
+        )
         logger.info(f"Saving model using method: {save_method}")
         
         save_dir = self.output_dir / "final_model"
