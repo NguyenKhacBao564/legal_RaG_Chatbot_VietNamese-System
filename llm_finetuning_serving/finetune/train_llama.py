@@ -113,12 +113,19 @@ class LlamaFineTuner:
         )
         
         logger.info("🔧 Applying HIGH-RANK LoRA configuration with Unsloth for H200")
+        target_modules = (
+            ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+            if self.config.load_in_4bit
+            else [
+                "q_proj", "k_proj", "v_proj", "o_proj",
+                "gate_proj", "up_proj", "down_proj",
+                "embed_tokens", "lm_head",
+            ]
+        )
         self.model = FastLanguageModel.get_peft_model(
             self.model,
             r=self.config.lora_r,  
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                          "gate_proj", "up_proj", "down_proj",
-                          "embed_tokens", "lm_head"],  
+            target_modules=target_modules,
             lora_alpha=self.config.lora_alpha, 
             lora_dropout=self.config.lora_dropout,  
             bias=self.config.bias,  
@@ -145,7 +152,7 @@ class LlamaFineTuner:
         try:
             spaces_manager = DOSpacesManager()
             
-            local_data_dir = Path("../data_processing/splits")
+            local_data_dir = self.data_dir
             local_data_dir.mkdir(parents=True, exist_ok=True)
             
             files_to_download = [
@@ -166,7 +173,7 @@ class LlamaFineTuner:
         datasets = {}
         
         # Load train dataset
-        train_path = Path("../data_processing/splits/train.jsonl")
+        train_path = self.data_dir / "train.jsonl"
         if train_path.exists():
             train_data = []
             with open(train_path, 'r', encoding='utf-8') as f:
@@ -178,7 +185,7 @@ class LlamaFineTuner:
             raise FileNotFoundError(f"Training data not found: {train_path}")
         
         # Load validation dataset
-        val_path = Path("../data_processing/splits/valid.jsonl")
+        val_path = self.data_dir / "valid.jsonl"
         if val_path.exists():
             val_data = []
             with open(val_path, 'r', encoding='utf-8') as f:
@@ -190,7 +197,7 @@ class LlamaFineTuner:
             logger.warning("Validation data not found - training without validation")
         
         # Load test dataset
-        test_path = Path("../data_processing/splits/test.jsonl")
+        test_path = self.data_dir / "test.jsonl"
         if test_path.exists():
             test_data = []
             with open(test_path, 'r', encoding='utf-8') as f:
@@ -542,15 +549,13 @@ def main(gpu_type: str = "h200"):
             run_name=f"vietnamese-legal-llama-h200-MAXIMIZED-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         )
     
-    # Update output directory
-    config.output_dir = "/home/mikeethanh/Vietnamese-Legal-Chatbot-RAG-System/llm_finetuning_serving/finetune/outputs"
-    
-    # Data directory
-    data_dir = "/home/mikeethanh/Vietnamese-Legal-Chatbot-RAG-System/llm_finetuning_serving/data_processing/splits"
+    repo_dir = Path(__file__).resolve().parents[1]
+    config.output_dir = str(repo_dir / "finetune" / "outputs")
+    data_dir = str(repo_dir / "data_processing" / "splits")
     
     # Initialize trainer
     logger.info("🚀 Initializing Vietnamese Legal LLM Fine-tuner with Unsloth")
-    logger.info("� H200 MAXIMIZED Configuration (140GB VRAM AGGRESSIVE USAGE):")
+    logger.info(f"Selected configuration: {gpu_type.upper()}")
     logger.info(f"   - Model: {config.model_name}")
     logger.info(f"   - Max sequence length: {config.max_seq_length} (DOUBLED from 4K to 8K)")
     logger.info(f"   - Precision: {'16-bit' if not config.load_in_4bit else '4-bit'} (H200 native bf16)")
