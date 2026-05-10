@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-CPU-optimized serving script for Vietnamese Legal LLM
-Uses standard transformers without Unsloth for CPU inference
+Local serving script for Vietnamese Legal LLM.
+Supports CPU, Apple Silicon MPS, and Hugging Face PEFT/LoRA adapters.
 """
 
 import os
@@ -34,12 +34,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import uvicorn
 
-# ML libraries for CPU inference
+# ML libraries for local inference
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, TextStreamer
-
-# Force CPU usage
-os.environ['CUDA_VISIBLE_DEVICES'] = ''
+from peft import PeftConfig, PeftModel
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -69,40 +67,99 @@ class ChatResponse(BaseModel):
     choices: List[Dict[str, Any]] = Field(..., description="Response choices")
     usage: Dict[str, int] = Field(..., description="Token usage statistics")
 
+def get_device() -> str:
+    """Select the best local device."""
+    requested_device = os.environ.get("DEVICE", "auto").lower()
+    if requested_device != "auto":
+        return requested_device
+    if torch.backends.mps.is_available():
+        return "mps"
+    if torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
+
+
+def resolve_torch_dtype(device: str):
+    if device == "cpu":
+        return torch.float32
+    return torch.float16
+
+
 def load_model_cpu():
-    """Load model optimized for CPU inference"""
+    """Load model optimized for local inference."""
     global model, tokenizer, model_config
     
     try:
-        model_path = os.environ.get('MODEL_PATH', '/home/ubuntu/model')
-        logger.info(f"Loading model from {model_path} for CPU inference...")
+        model_path = os.environ.get("MODEL_PATH", "")
+        model_name = os.environ.get(
+            "MODEL_NAME",
+            "NguyenBao564/vietnamese-legal-llama-3.1-8b",
+        )
+        adapter_model_name = os.environ.get("ADAPTER_MODEL_NAME") or model_name
+        base_model_name = os.environ.get("BASE_MODEL_NAME")
+        hf_token = os.environ.get("HF_TOKEN") or None
+        device = get_device()
+        torch_dtype = resolve_torch_dtype(device)
+
+        model_source = adapter_model_name or model_path
+        logger.info(f"Loading model source: {model_source}")
+        logger.info(f"Selected device: {device}")
         
-        # Load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        try:
+            peft_config = PeftConfig.from_pretrained(model_source, token=hf_token)
+            base_model_name = base_model_name or peft_config.base_model_name_or_path
+            if not base_model_name:
+                base_model_name = "unsloth/Llama-3.1-8B-Instruct"
+
+            logger.info(f"Detected PEFT adapter: {model_source}")
+            logger.info(f"Loading base model: {base_model_name}")
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_source,
+                token=hf_token,
+                trust_remote_code=True,
+            )
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_name,
+                torch_dtype=torch_dtype,
+                low_cpu_mem_usage=True,
+                trust_remote_code=True,
+                token=hf_token,
+            )
+            model = PeftModel.from_pretrained(
+                base_model,
+                model_source,
+                token=hf_token,
+            )
+        except Exception as peft_error:
+            logger.info(f"PEFT loading skipped/failed: {peft_error}")
+            local_or_remote_model = model_path or model_name
+            tokenizer = AutoTokenizer.from_pretrained(
+                local_or_remote_model,
+                token=hf_token,
+                trust_remote_code=True,
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                local_or_remote_model,
+                torch_dtype=torch_dtype,
+                low_cpu_mem_usage=True,
+                trust_remote_code=True,
+                token=hf_token,
+            )
+
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
-        
-        # Load model with CPU optimizations
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            torch_dtype=torch.float32,  # Use float32 for CPU
-            low_cpu_mem_usage=True,
-            trust_remote_code=True
-        )
-        
-        # Ensure model is on CPU
-        model = model.to('cpu')
-        
-        # Set model to evaluation mode
+
+        model = model.to(device)
         model.eval()
         
         # Load model config
-        config_path = Path(model_path) / "config.json"
-        if config_path.exists():
+        config_path = Path(model_path) / "config.json" if model_path else None
+        if config_path and config_path.exists():
             with open(config_path, 'r') as f:
                 model_config = json.load(f)
         
-        logger.info("Model loaded successfully on CPU!")
+        logger.info("Model loaded successfully!")
         logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
         
     except Exception as e:
@@ -110,19 +167,30 @@ def load_model_cpu():
         raise
 
 def format_conversation(messages: List[ChatMessage]) -> str:
-    """Format conversation for the model"""
-    conversation = ""
-    for message in messages:
-        if message.role == "system":
-            conversation += f"System: {message.content}\n"
-        elif message.role == "user":
-            conversation += f"Human: {message.content}\n"
-        elif message.role == "assistant":
-            conversation += f"Assistant: {message.content}\n"
-    
-    # Add prompt for assistant response
-    conversation += "Assistant:"
-    return conversation
+    """Format conversation with the tokenizer chat template when available."""
+    payload = [{"role": msg.role, "content": msg.content} for msg in messages]
+    if tokenizer and getattr(tokenizer, "chat_template", None):
+        return tokenizer.apply_chat_template(
+            payload,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+    system = "Bạn là trợ lý tư vấn pháp luật Việt Nam."
+    turns = []
+    for msg in payload:
+        if msg["role"] == "system":
+            system = msg["content"]
+        elif msg["role"] == "user":
+            turns.append(f"<|start_header_id|>user<|end_header_id|>\n\n{msg['content']}<|eot_id|>")
+        elif msg["role"] == "assistant":
+            turns.append(f"<|start_header_id|>assistant<|end_header_id|>\n\n{msg['content']}<|eot_id|>")
+    return (
+        f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
+        f"{system}<|eot_id|>\n"
+        + "\n".join(turns)
+        + "\n<|start_header_id|>assistant<|end_header_id|>\n\n"
+    )
 
 def generate_response(messages: List[ChatMessage], temperature: float, max_tokens: int, top_p: float) -> str:
     """Generate response using CPU inference"""
@@ -133,7 +201,9 @@ def generate_response(messages: List[ChatMessage], temperature: float, max_token
         prompt = format_conversation(messages)
         
         # Tokenize input
+        device = next(model.parameters()).device
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
+        inputs = {k: v.to(device) for k, v in inputs.items()}
         
         # Generate response
         with torch.no_grad():
@@ -149,10 +219,12 @@ def generate_response(messages: List[ChatMessage], temperature: float, max_token
             )
         
         # Decode response
-        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        response = tokenizer.decode(outputs[0], skip_special_tokens=False)
         
         # Extract only the new generated text
         generated_text = response[len(prompt):].strip()
+        for token in ["<|eot_id|>", "<|end_of_text|>", "</s>"]:
+            generated_text = generated_text.replace(token, "")
         
         return generated_text
         
@@ -163,7 +235,7 @@ def generate_response(messages: List[ChatMessage], temperature: float, max_token
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    logger.info("Starting Vietnamese Legal LLM API Server (CPU Version)...")
+    logger.info("Starting Vietnamese Legal LLM API Server (local CPU/MPS version)...")
     load_model_cpu()
     yield
     logger.info("Shutting down...")
@@ -194,7 +266,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "device": "cpu",
+        "device": str(next(model.parameters()).device) if model is not None else "unknown",
         "model_loaded": model is not None,
         "timestamp": datetime.now().isoformat()
     }
@@ -256,7 +328,7 @@ async def chat_completions(request: ChatRequest):
 
 if __name__ == "__main__":
     host = os.environ.get('HOST', '0.0.0.0')
-    port = int(os.environ.get('PORT', 7000))
+    port = int(os.environ.get('PORT', 6000))
     
     logger.info(f"Starting server on {host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")

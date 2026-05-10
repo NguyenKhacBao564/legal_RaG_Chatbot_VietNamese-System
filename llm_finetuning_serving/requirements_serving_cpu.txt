@@ -6,6 +6,8 @@ torch>=2.0.0
 transformers>=4.35.0
 accelerate>=0.24.0
 tokenizers>=0.14.0
+peft>=0.7.0
+huggingface_hub>=0.23.0
 
 # FastAPI and web server
 fastapi>=0.104.0
