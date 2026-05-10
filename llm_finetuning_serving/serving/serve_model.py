@@ -28,6 +28,7 @@ import uvicorn
 # ML libraries
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, TextStreamer
+from peft import PeftConfig, PeftModel
 try:
     from unsloth import FastLanguageModel
 except ImportError:
@@ -73,8 +74,16 @@ async def load_model():
     
     model_path = os.getenv("MODEL_PATH", "/app/model")
     model_name = os.getenv("MODEL_NAME", "latest")
+    hf_token = os.getenv("HF_TOKEN") or None
+    load_in_4bit = os.getenv("LOAD_IN_4BIT", "true").lower() == "true"
+    base_model_name = os.getenv("BASE_MODEL_NAME")
+    adapter_model_name = os.getenv("ADAPTER_MODEL_NAME")
+    torch_dtype = torch.float16
     
-    logger.info(f"Loading model from {model_path}")
+    model_source = adapter_model_name or (
+        model_name if model_name not in ("", "latest") else model_path
+    )
+    logger.info(f"Loading model source: {model_source}")
     
     # Download model from Digital Ocean Spaces if not exists locally
     try:
@@ -106,26 +115,74 @@ async def load_model():
         logger.info("Using local model path...")
     
     try:
-        # Try loading with Unsloth first (for LoRA models)
         try:
-            model, tokenizer = FastLanguageModel.from_pretrained(
-                model_name=model_path,
-                max_seq_length=2048,
-                dtype=None,
-                load_in_4bit=True,
+            peft_config = PeftConfig.from_pretrained(
+                model_source,
+                token=hf_token,
             )
-            FastLanguageModel.for_inference(model)
-            logger.info("Model loaded with Unsloth")
-        except:
-            # Fallback to standard transformers
-            logger.info("Loading with standard transformers...")
-            tokenizer = AutoTokenizer.from_pretrained(model_path)
-            model = AutoModelForCausalLM.from_pretrained(
-                model_path,
-                torch_dtype=torch.bfloat16,
-                device_map="auto",
-                trust_remote_code=True
+            base_model_name = base_model_name or peft_config.base_model_name_or_path
+            if not base_model_name:
+                base_model_name = "unsloth/Llama-3.1-8B-Instruct"
+
+            logger.info(f"Detected PEFT adapter: {model_source}")
+            logger.info(f"Loading base model: {base_model_name}")
+
+            model_kwargs = {
+                "device_map": "auto",
+                "torch_dtype": torch_dtype,
+                "trust_remote_code": True,
+                "token": hf_token,
+            }
+            if load_in_4bit:
+                model_kwargs["load_in_4bit"] = True
+
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_name,
+                **model_kwargs,
             )
+            model = PeftModel.from_pretrained(
+                base_model,
+                model_source,
+                token=hf_token,
+            )
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_source,
+                token=hf_token,
+                trust_remote_code=True,
+            )
+            logger.info("PEFT adapter loaded with transformers")
+        except Exception as peft_error:
+            logger.info(f"PEFT loading skipped/failed: {peft_error}")
+            try:
+                model, tokenizer = FastLanguageModel.from_pretrained(
+                    model_name=model_source,
+                    max_seq_length=2048,
+                    dtype=None,
+                    load_in_4bit=load_in_4bit,
+                    token=hf_token,
+                )
+                FastLanguageModel.for_inference(model)
+                logger.info("Model loaded with Unsloth")
+            except Exception as unsloth_error:
+                logger.info(f"Unsloth loading failed: {unsloth_error}")
+                logger.info("Loading as a full transformers model...")
+                tokenizer = AutoTokenizer.from_pretrained(
+                    model_source,
+                    token=hf_token,
+                    trust_remote_code=True,
+                )
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_source,
+                    torch_dtype=torch_dtype,
+                    device_map="auto",
+                    trust_remote_code=True,
+                    token=hf_token,
+                )
+
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        model.eval()
             
         # Load model config if available
         config_path = Path(model_path) / "config.json"
