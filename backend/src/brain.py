@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import requests
 
 from openai import OpenAI
@@ -24,6 +25,11 @@ CHAT_MODEL = (
     or ("gemini-2.5-flash" if GEMINI_API_KEY else "gpt-4o-mini")
 )
 VIETNAMESE_LLM_API_URL = os.environ.get("VIETNAMESE_LLM_API_URL", "").strip()
+LOCAL_LLM_TIMEOUT = int(os.environ.get("LOCAL_LLM_TIMEOUT", "420"))
+LOCAL_LLM_MAX_TOKENS = int(os.environ.get("LOCAL_LLM_MAX_TOKENS", "384"))
+ENABLE_REMOTE_FALLBACK = os.environ.get("ENABLE_REMOTE_FALLBACK", "false").lower() == "true"
+ENABLE_LLM_REPHRASE = os.environ.get("ENABLE_LLM_REPHRASE", "false").lower() == "true"
+ENABLE_LLM_ROUTER = os.environ.get("ENABLE_LLM_ROUTER", "false").lower() == "true"
 
 
 def get_openai_client():
@@ -36,59 +42,83 @@ def get_openai_client():
 client = get_openai_client()
 
 
-def vietnamese_llm_chat_complete(messages=(), temperature=0.7, max_tokens=4096):
+def vietnamese_llm_chat_complete(messages=(), temperature=0.7, max_tokens=4096, skip_local=False):
     """
-    Gọi Vietnamese Legal LLM API nếu được cấu hình, nếu không dùng chat model mặc định.
+    Calls Vietnamese Legal LLM API if configured.
+    If skip_local is True, it forces use of the default chat model (Gemini/OpenAI).
     """
-    if not VIETNAMESE_LLM_API_URL:
-        logger.info("VIETNAMESE_LLM_API_URL not configured; using default chat model")
+    if not VIETNAMESE_LLM_API_URL or skip_local:
+        if not VIETNAMESE_LLM_API_URL:
+            logger.info("VIETNAMESE_LLM_API_URL not configured; using default chat model")
         return openai_chat_complete(
-            messages, temperature=temperature, max_tokens=max_tokens
+            messages, temperature=temperature, max_tokens=max_tokens, use_local=False
         )
 
     logger.info("Vietnamese LLM chat complete for {}".format(messages))
-
     try:
-        # Chuẩn bị payload cho API call
+        safe_max_tokens = min(max_tokens, LOCAL_LLM_MAX_TOKENS)
         payload = {
             "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
+            "temperature": max(temperature, 0.1),
+            "max_tokens": safe_max_tokens,
         }
-
-        # Gọi API
         response = requests.post(
             VIETNAMESE_LLM_API_URL,
             headers={"Content-Type": "application/json"},
             json=payload,
-            timeout=300  # 5 phút timeout
+            timeout=LOCAL_LLM_TIMEOUT
         )
         
         if response.status_code == 200:
             result = response.json()
-            content = result["choices"][0]["message"]["content"]
-            logger.info("Vietnamese LLM response: {}".format(content[:200] + "..."))
+            content = result["choices"][0]["message"].get("content", "").strip()
+            if not content:
+                logger.error("Vietnamese LLM API returned empty content")
+                return "Xin lỗi, model local đã trả về nội dung rỗng. Vui lòng thử lại với câu hỏi ngắn hơn."
             return content
         else:
-            logger.error(f"Vietnamese LLM API error: {response.status_code} - {response.text}")
-            logger.info("Falling back to default chat model")
-            return openai_chat_complete(
-                messages, temperature=temperature, max_tokens=max_tokens
+            logger.error(
+                f"Vietnamese LLM API error: {response.status_code} - {response.text[:500]}"
             )
-
     except Exception as e:
         logger.error(f"Error calling Vietnamese LLM API: {e}")
-        logger.info("Falling back to default chat model due to error")
+
+    if ENABLE_REMOTE_FALLBACK:
         return openai_chat_complete(
-            messages, temperature=temperature, max_tokens=max_tokens
+            messages, temperature=temperature, max_tokens=max_tokens, use_local=False
         )
+
+    return (
+        "Xin lỗi, model local hiện chưa trả lời được trong thời gian cho phép. "
+        "Máy local đang thiếu RAM/CPU cho Llama 8B nên phản hồi có thể rất chậm. "
+        "Bạn có thể thử hỏi ngắn hơn hoặc chạy model trên GPU."
+    )
 
 
 def openai_chat_complete(
-    messages=(), model=None, temperature=0.7, max_tokens=4096, raw=False
+    messages=(), model=None, temperature=0.7, max_tokens=4096, raw=False, use_local=False
 ):
+    logger.info(f"openai_chat_complete: use_local={use_local}, url={VIETNAMESE_LLM_API_URL}")
+    # If local model is configured and not explicitly disabled, use it
+    if VIETNAMESE_LLM_API_URL and use_local:
+        logger.info("Routing to local LLM via openai_chat_complete")
+        content = vietnamese_llm_chat_complete(messages, temperature, max_tokens)
+        if raw:
+            class MockMessage:
+                def __init__(self, content): self.content = content
+            class MockChoice:
+                def __init__(self, content): self.message = MockMessage(content)
+            class MockResponse:
+                def __init__(self, content): self.choices = [MockChoice(content)]
+            return MockResponse(content).choices[0].message
+        return content
+
     selected_model = model or CHAT_MODEL
     logger.info("Chat complete with model %s", selected_model)
+
+    if not CHAT_API_KEY:
+        return "Lỗi: Chưa cấu hình API Key và Local Model không khả dụng."
+
     response = client.chat.completions.create(
         model=selected_model,
         messages=messages,
@@ -97,9 +127,7 @@ def openai_chat_complete(
     )
     if raw:
         return response.choices[0].message
-    output = response.choices[0].message
-    logger.info("Chat complete output: %s", output.content[:200])
-    return output.content
+    return response.choices[0].message.content
 
 
 def get_embedding(text, model=None):
@@ -142,6 +170,9 @@ def detect_user_intent(history, message):
     Detect user intent and rephrase follow-up questions to standalone questions.
     Improved for Vietnamese legal context with better prompt engineering.
     """
+    if not ENABLE_LLM_REPHRASE:
+        return message
+
     # Convert history to list messages
     history_messages = generate_conversation_text(history)
     logger.info(f"History messages: {history_messages}")
@@ -220,6 +251,36 @@ def detect_route(history, message):
     - general_chat: Greetings, small talk, off-topic conversations
     """
     logger.info(f"Detect route on history messages: {history}")
+
+    if not ENABLE_LLM_ROUTER:
+        message_lower = message.lower().strip()
+        greeting_patterns = [
+            r"^(xin chào|chào|hello|hi|hey)\b",
+            r"^(cảm ơn|cam on|thanks|thank you)\b",
+            r"^(bạn là ai|ban la ai|bạn làm được gì)\b",
+        ]
+        if any(re.search(pattern, message_lower) for pattern in greeting_patterns):
+            return "general_chat"
+
+        current_keywords = ["mới nhất", "gần đây", "vừa ban hành", "hôm nay", "hiện nay"]
+        if any(keyword in message_lower for keyword in current_keywords):
+            return "web_search"
+
+        calc_keywords = [
+            "tính",
+            "kiểm tra",
+            "hợp lệ",
+            "đủ tuổi",
+            "chia",
+            "lãi suất",
+            "thời hiệu",
+        ]
+        if any(keyword in message_lower for keyword in calc_keywords) and any(
+            char.isdigit() for char in message_lower
+        ):
+            return "agent_tools"
+
+        return "legal_rag"
 
     # Format history for better context
     history_text = ""

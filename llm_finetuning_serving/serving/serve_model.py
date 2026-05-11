@@ -27,12 +27,12 @@ import uvicorn
 
 # ML libraries
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, TextStreamer
+from transformers import AutoTokenizer, AutoModelForCausalLM, TextStreamer, BitsAndBytesConfig
 from peft import PeftConfig, PeftModel
 try:
     from unsloth import FastLanguageModel
-except ImportError:
-    print("Unsloth not available, using standard transformers")
+except (ImportError, NotImplementedError):
+    print("Unsloth not available or not supported on this hardware, using standard transformers")
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -51,7 +51,7 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage] = Field(..., description="List of chat messages")
     temperature: float = Field(0.7, ge=0.1, le=2.0, description="Sampling temperature")
     top_p: float = Field(0.9, ge=0.1, le=1.0, description="Top-p sampling")
-    max_tokens: int = Field(512, ge=1, le=2048, description="Maximum tokens to generate")
+    max_tokens: int = Field(512, ge=1, le=4096, description="Maximum tokens to generate")
     stream: bool = Field(False, description="Stream response")
 
 class ChatResponse(BaseModel):
@@ -76,9 +76,12 @@ async def load_model():
     model_name = os.getenv("MODEL_NAME", "latest")
     hf_token = os.getenv("HF_TOKEN") or None
     load_in_4bit = os.getenv("LOAD_IN_4BIT", "true").lower() == "true"
+    local_files_only = os.getenv("HF_HUB_OFFLINE", "false").lower() in ("1", "true", "yes")
     base_model_name = os.getenv("BASE_MODEL_NAME")
     adapter_model_name = os.getenv("ADAPTER_MODEL_NAME")
     torch_dtype = torch.float16
+    has_cuda = torch.cuda.is_available()
+    has_mps = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
     
     model_source = adapter_model_name or (
         model_name if model_name not in ("", "latest") else model_path
@@ -119,6 +122,7 @@ async def load_model():
             peft_config = PeftConfig.from_pretrained(
                 model_source,
                 token=hf_token,
+                local_files_only=local_files_only,
             )
             base_model_name = base_model_name or peft_config.base_model_name_or_path
             if not base_model_name:
@@ -128,13 +132,21 @@ async def load_model():
             logger.info(f"Loading base model: {base_model_name}")
 
             model_kwargs = {
-                "device_map": "auto",
                 "torch_dtype": torch_dtype,
                 "trust_remote_code": True,
                 "token": hf_token,
+                "local_files_only": local_files_only,
+                "low_cpu_mem_usage": True,
             }
-            if load_in_4bit:
-                model_kwargs["load_in_4bit"] = True
+            if has_cuda:
+                model_kwargs["device_map"] = "auto"
+            else:
+                logger.info("CUDA is not available; loading model without device_map auto/offload")
+
+            if load_in_4bit and has_cuda:
+                model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
+            elif load_in_4bit:
+                logger.info("Skipping runtime 4-bit quantization because CUDA is not available")
 
             base_model = AutoModelForCausalLM.from_pretrained(
                 base_model_name,
@@ -144,11 +156,16 @@ async def load_model():
                 base_model,
                 model_source,
                 token=hf_token,
+                local_files_only=local_files_only,
             )
+            if has_mps:
+                logger.info("Moving PEFT model to MPS")
+                model = model.to("mps")
             tokenizer = AutoTokenizer.from_pretrained(
                 model_source,
                 token=hf_token,
                 trust_remote_code=True,
+                local_files_only=local_files_only,
             )
             logger.info("PEFT adapter loaded with transformers")
         except Exception as peft_error:
@@ -170,14 +187,18 @@ async def load_model():
                     model_source,
                     token=hf_token,
                     trust_remote_code=True,
+                    local_files_only=local_files_only,
                 )
                 model = AutoModelForCausalLM.from_pretrained(
                     model_source,
                     torch_dtype=torch_dtype,
-                    device_map="auto",
                     trust_remote_code=True,
                     token=hf_token,
+                    local_files_only=local_files_only,
+                    low_cpu_mem_usage=True,
                 )
+                if has_mps:
+                    model = model.to("mps")
 
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token

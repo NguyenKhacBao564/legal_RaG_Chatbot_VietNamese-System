@@ -211,16 +211,25 @@ all_tools = [
 # Initialize LLM and Agent
 gemini_api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 llm_api_key = gemini_api_key or os.environ.get("OPENAI_API_KEY")
-llm_base_url = (
-    os.environ.get("GEMINI_BASE_URL")
-    or os.environ.get("OPENAI_BASE_URL")
-    or ("https://generativelanguage.googleapis.com/v1beta/openai/" if gemini_api_key else None)
-)
-llm_model = (
-    os.environ.get("GEMINI_MODEL")
-    or os.environ.get("OPENAI_MODEL")
-    or ("gemini-2.5-flash" if gemini_api_key else "gpt-4o-mini")
-)
+vietnamese_llm_api_url = os.environ.get("VIETNAMESE_LLM_API_URL", "").strip()
+
+if vietnamese_llm_api_url:
+    # Use local model for agent if configured
+    llm_base_url = vietnamese_llm_api_url.replace("/chat/completions", "")
+    llm_model = os.environ.get("VIETNAMESE_LLM_MODEL", "vietnamese-legal-llama")
+    llm_api_key = "local-no-key"
+    logger.info(f"Agent using local LLM at {llm_base_url}")
+else:
+    llm_base_url = (
+        os.environ.get("GEMINI_BASE_URL")
+        or os.environ.get("OPENAI_BASE_URL")
+        or ("https://generativelanguage.googleapis.com/v1beta/openai/" if gemini_api_key else None)
+    )
+    llm_model = (
+        os.environ.get("GEMINI_MODEL")
+        or os.environ.get("OPENAI_MODEL")
+        or ("gemini-2.5-flash" if gemini_api_key else "gpt-4o-mini")
+    )
 
 llm_kwargs = {"model": llm_model, "temperature": 0.1}
 if llm_api_key:

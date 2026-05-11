@@ -1,7 +1,14 @@
+import os
+
 from brain import openai_chat_complete
+
+ENABLE_LLM_SUMMARY = os.environ.get("ENABLE_LLM_SUMMARY", "false").lower() == "true"
 
 
 def summarize_text(text):
+    if not ENABLE_LLM_SUMMARY:
+        return text
+
     # prepare template for prompt
     template = """You are a very good assistant that summarizes text.
 

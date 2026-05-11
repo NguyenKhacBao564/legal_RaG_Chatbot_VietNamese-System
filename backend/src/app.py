@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from dataclasses import Field
 from typing import Dict, Optional
@@ -13,7 +14,7 @@ from utils import setup_logging
 from vectorize import create_collection
 
 # Constants
-TASK_TIMEOUT = 60
+TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT", "420"))
 POLLING_INTERVAL = 0.5
 
 setup_logging()

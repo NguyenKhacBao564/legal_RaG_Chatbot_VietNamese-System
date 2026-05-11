@@ -1,9 +1,11 @@
 import logging
+import os
 from typing import Dict, List
 
 from brain import openai_chat_complete
 
 logger = logging.getLogger(__name__)
+ENABLE_LLM_QUERY_REWRITE = os.environ.get("ENABLE_LLM_QUERY_REWRITE", "false").lower() == "true"
 
 
 def expand_legal_query(query: str) -> str:
@@ -112,6 +114,14 @@ def rewrite_query_to_multi_queries(
         logger.info(f"Expanded query: {expanded_query}")
     else:
         expanded_query = original_query
+
+    if not ENABLE_LLM_QUERY_REWRITE:
+        queries = [original_query]
+        if expanded_query != original_query:
+            queries.append(expanded_query)
+        while len(queries) < num_queries:
+            queries.append(original_query)
+        return queries[:num_queries]
 
     prompt = f"""Bạn là trợ lý AI chuyên về luật pháp Việt Nam. Nhiệm vụ của bạn là tạo ra {num_queries} câu hỏi khác nhau nhưng có cùng ý nghĩa với câu hỏi gốc để tìm kiếm thông tin pháp luật hiệu quả hơn.
 

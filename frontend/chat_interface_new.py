@@ -319,7 +319,7 @@ class ChatApp:
         headers = {"Content-Type": "application/json"}
         
         try:
-            response = requests.post(url, json=payload, headers=headers, timeout=300)
+            response = requests.post(url, json=payload, headers=headers, timeout=900)
             if response.status_code != 200:
                 logger.error(f"send_user_request non-200 status: {response.status_code} body: {response.text}")
                 raise requests.RequestException(f"Request failed: {response.text}")
@@ -379,7 +379,7 @@ class ChatApp:
         url = f"{API_BASE_URL}/chat/complete/{request_id}"
         
         try:
-            response = requests.get(url, timeout=300)
+            response = requests.get(url, timeout=900)
             if response.status_code != 200:
                 logger.error(f"get_bot_response non-200 status: {response.status_code} body: {response.text}")
                 raise requests.RequestException(f"Get response failed: {response.text}")

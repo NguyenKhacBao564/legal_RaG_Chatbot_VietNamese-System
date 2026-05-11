@@ -121,6 +121,7 @@ def bot_rag_answer_message(history, question):
     # Step 1: Handle follow-up questions by rephrasing with context
     standalone_question = follow_up_question(history, question)
     logger.info(f"Standalone question: {standalone_question}")
+    recent_history = history[-4:] if history else []
 
     stats = get_collection_stats(DEFAULT_COLLECTION_NAME)
     doc_count = 0
@@ -142,7 +143,7 @@ def bot_rag_answer_message(history, question):
                     ),
                 }
             ]
-            + history
+            + recent_history
             + [{"role": "user", "content": question}]
         )
         return vietnamese_llm_chat_complete(fallback_messages)
@@ -182,7 +183,7 @@ QUAN TRỌNG: Chỉ sử dụng thông tin từ các tài liệu được cung c
 
     openai_messages = (
         [{"role": "system", "content": system_prompt}]
-        + history
+        + recent_history
         + [
             {
                 "role": "user",

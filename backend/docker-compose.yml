@@ -27,7 +27,7 @@ services:
     build: .
     hostname: chatbot-worker
     container_name: chatbot-worker
-    command: celery -A tasks.celery_app worker --loglevel=debug --logfile=/var/logs/celery.log
+    command: celery -A tasks.celery_app worker --loglevel=info --concurrency=1 --prefetch-multiplier=1 --logfile=/var/logs/celery.log
     restart: always
     env_file:
       - .env

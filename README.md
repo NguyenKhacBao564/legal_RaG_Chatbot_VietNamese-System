@@ -1,9 +1,8 @@
 # Vietnamese Legal Chatbot RAG System
 
 He thong chatbot tu van phap luat Viet Nam su dung FastAPI, Streamlit, Celery,
-MariaDB, Valkey, Qdrant va LLM OpenAI-compatible. Ban hien tai duoc cau hinh de
-chay voi Gemini API, co fallback tra loi truc tiep bang Gemini khi chua import
-du lieu RAG.
+MariaDB, Valkey, Qdrant va LLM OpenAI-compatible. Du an co the chay voi Gemini
+API hoac model local fine-tuned cua ban qua endpoint `/v1/chat/completions`.
 
 ## Tinh nang chinh
 
@@ -36,7 +35,8 @@ du lieu RAG.
 
 - Docker va Docker Compose v2.
 - Gemini API key hoac mot endpoint LLM OpenAI-compatible.
-- Tuy chon: Vast.ai GPU de chay embedding service hoac fine-tuned LLM.
+- Tuy chon: Vast.ai GPU de fine-tune/chay model nang.
+- Tuy chon tren Mac Apple Silicon: `llama-cpp-python` de chay model local GGUF.
 
 ## Cau hinh moi truong
 
@@ -76,11 +76,56 @@ CUSTOM_EMBEDDING_API_URL=http://your-embedding-host:5001
 CUSTOM_EMBEDDING_ENABLED=true
 
 # De trong neu muon dung Gemini truc tiep.
-# Dat endpoint nay neu da deploy fine-tuned LLM tren Vast.ai.
+# Dat endpoint nay neu chay fine-tuned LLM local/Vast.ai.
 VIETNAMESE_LLM_API_URL=
+LOCAL_LLM_TIMEOUT=420
+LOCAL_LLM_MAX_TOKENS=384
+ENABLE_REMOTE_FALLBACK=false
+ENABLE_LLM_REPHRASE=false
+ENABLE_LLM_ROUTER=false
+ENABLE_LLM_QUERY_REWRITE=false
+ENABLE_LLM_SUMMARY=false
+TASK_TIMEOUT=420
 ```
 
 Khong commit cac file `.env`. Chung da duoc ignore.
+
+## Chay model local tren Mac
+
+May local 16GB RAM khong nen chay Llama 8B bang Transformers FP16 vi rat cham
+va de bi swap. Duong chay local nen dung GGUF Q4 voi `llama.cpp`.
+
+File model lon khong nam trong Git. Tren may nay da chuan bi:
+
+```text
+llm_finetuning_serving/models/gguf/Llama-3.1-8B-Instruct-Q4_K_M.gguf
+llm_finetuning_serving/models/gguf/vietnamese-legal-lora.gguf
+```
+
+Neu can tao lai, tai base GGUF `unsloth/Llama-3.1-8B-Instruct-GGUF` ban
+`Q4_K_M`, sau do convert adapter PEFT `NguyenBao564/vietnamese-legal-llama-3.1-8b`
+sang GGUF bang `convert_lora_to_gguf.py` cua llama.cpp. Khong commit cac file
+`.gguf`.
+
+Chay server model local:
+
+```bash
+cd llm_finetuning_serving/serving
+python serve_model_gguf.py
+```
+
+Kiem tra:
+
+```bash
+curl http://localhost:6000/health
+```
+
+Trong `backend/.env`, tro backend Docker ve model local:
+
+```env
+VIETNAMESE_LLM_API_URL=http://host.docker.internal:6000/v1/chat/completions
+ENABLE_REMOTE_FALLBACK=false
+```
 
 ## Chay bang Docker
 
