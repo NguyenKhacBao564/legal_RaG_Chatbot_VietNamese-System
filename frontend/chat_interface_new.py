@@ -101,16 +101,47 @@ st.markdown("""
         line-height: 1.6;
     }
     
-    .stChatMessage[data-testid="chat-message-user"] {
+    .stChatMessage[data-testid="chat-message-user"],
+    div[data-testid="stChatMessage"][aria-label="Chat message from user"] {
         background: linear-gradient(135deg, var(--primary-color) 0%, #3b82f6 100%);
         color: white;
         margin-left: 20%;
     }
     
-    .stChatMessage[data-testid="chat-message-assistant"] {
+    .stChatMessage[data-testid="chat-message-assistant"],
+    div[data-testid="stChatMessage"][aria-label="Chat message from assistant"] {
         background-color: #f1f5f9;
         border-left: 4px solid var(--accent-color);
         margin-right: 20%;
+    }
+
+    .stChatMessage[data-testid="chat-message-assistant"] div[data-testid="stMarkdownContainer"],
+    .stChatMessage[data-testid="chat-message-assistant"] div[data-testid="stMarkdownContainer"] p,
+    .stChatMessage[data-testid="chat-message-assistant"] div[data-testid="stMarkdownContainer"] li,
+    div[aria-label="Chat message from assistant"] div[data-testid="stMarkdownContainer"],
+    div[aria-label="Chat message from assistant"] div[data-testid="stMarkdownContainer"] p,
+    div[aria-label="Chat message from assistant"] div[data-testid="stMarkdownContainer"] li {
+        font-family: "Times New Roman", Times, serif;
+        font-size: 1.06rem;
+        line-height: 1.72;
+        color: #111827;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: normal;
+    }
+
+    .stChatMessage[data-testid="chat-message-assistant"] div[data-testid="stMarkdownContainer"] ul,
+    .stChatMessage[data-testid="chat-message-assistant"] div[data-testid="stMarkdownContainer"] ol,
+    div[aria-label="Chat message from assistant"] div[data-testid="stMarkdownContainer"] ul,
+    div[aria-label="Chat message from assistant"] div[data-testid="stMarkdownContainer"] ol {
+        margin-top: 0.35rem;
+        margin-bottom: 0.75rem;
+        padding-left: 1.45rem;
+    }
+
+    .stChatMessage[data-testid="chat-message-assistant"] div[data-testid="stMarkdownContainer"] strong,
+    div[aria-label="Chat message from assistant"] div[data-testid="stMarkdownContainer"] strong {
+        font-weight: 700;
     }
     
     /* Input styling */
@@ -242,11 +273,13 @@ st.markdown("""
             font-size: 1.5rem;
         }
         
-        .stChatMessage[data-testid="chat-message-user"] {
+        .stChatMessage[data-testid="chat-message-user"],
+        div[data-testid="stChatMessage"][aria-label="Chat message from user"] {
             margin-left: 10%;
         }
         
-        .stChatMessage[data-testid="chat-message-assistant"] {
+        .stChatMessage[data-testid="chat-message-assistant"],
+        div[data-testid="stChatMessage"][aria-label="Chat message from assistant"] {
             margin-right: 10%;
         }
     }
@@ -300,69 +333,45 @@ class ChatApp:
             logger.error(f"Error getting response: {e}")
             raise
 
-    def display_formatted_content(self, content: str):
-        """Display content with forced formatting using container and multiple elements"""
+    def normalize_markdown_response(self, content: str) -> str:
+        """Clean model output so Streamlit can render Markdown naturally."""
+        if not content:
+            return ""
+
+        import ast
         import re
-        
-        # Split content by numbered patterns
-        parts = re.split(r'(\d+\.)', content)
-        
-        if len(parts) <= 1:
-            # No numbered list found, display as is
-            st.text(content)
-            return
-            
-        # Use container for better control
-        with st.container():
-            # Display introduction text (if any)
-            if parts[0].strip():
-                st.text(parts[0].strip())
-                st.text("")  # Empty line
-                
-            # Process numbered items
-            for i in range(1, len(parts), 2):
-                if i + 1 < len(parts):
-                    number = parts[i]  # "1.", "2.", etc
-                    text = parts[i + 1].strip()  # corresponding text
-                    
-                    if text:
-                        # Display each numbered item on separate lines
-                        st.text(f"{number} {text}")
-                        st.text("")  # Empty line for spacing
+
+        text = str(content).strip()
+
+        # Some backends return stringified assistant dictionaries.
+        if text.startswith("{'role'") or text.startswith('{"role"'):
+            try:
+                parsed = ast.literal_eval(text)
+                if isinstance(parsed, dict) and parsed.get("content"):
+                    text = str(parsed["content"]).strip()
+            except (ValueError, SyntaxError):
+                pass
+
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        if "\\n" in text and "\n" not in text:
+            text = text.replace("\\n", "\n")
+
+        # Fix common malformed Markdown generated by the model.
+        text = re.sub(r"\*\*\s+\*\*", "**", text)
+        text = re.sub(r"(?m)^\s*\*\*\s*$", "", text)
+        text = re.sub(r"(?m)^\s*\*\s*$", "", text)
+        text = re.sub(r"(?m)^(\s*)\*\s+", r"\1- ", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+
+        return text.strip()
+
+    def display_formatted_content(self, content: str):
+        """Render assistant content as Markdown instead of monospace plain text."""
+        st.markdown(self.normalize_markdown_response(content))
 
     def format_content_for_display(self, content: str) -> str:
-        """Format content for proper display with forced line breaks"""
-        if not content:
-            return content
-            
-        import re
-        
-        # Force line breaks by adding double newlines and spaces
-        # Split by numbered patterns and rejoin with forced spacing
-        parts = re.split(r'(\d+\.)', content)
-        
-        if len(parts) <= 1:
-            # No numbered list found, return as is
-            return content
-            
-        formatted_parts = []
-        for i, part in enumerate(parts):
-            if re.match(r'^\d+\.$', part):  # This is a number like "1."
-                if i > 0:  # Add line breaks before each numbered item (except first)
-                    formatted_parts.append('\n\n')
-                formatted_parts.append(f"**{part}**")
-            else:
-                # This is the text content, trim whitespace
-                cleaned_part = part.strip()
-                if cleaned_part:
-                    formatted_parts.append(f" {cleaned_part}")
-        
-        result = ''.join(formatted_parts)
-        
-        # Additional formatting - ensure each numbered item is on its own line
-        result = re.sub(r'(\d+\.\*\*)\s+', r'\1 ', result)
-        
-        return result
+        """Backwards-compatible wrapper for response formatting."""
+        return self.normalize_markdown_response(content)
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=20))
     def get_bot_response(self, request_id: str) -> tuple[int, Dict[str, Any]]:
@@ -442,21 +451,9 @@ class ChatApp:
             res = self.get_chat_complete(user_message)
             st.session_state.current_typing = False
             
-            # Ensure proper line breaks and formatting are preserved
-            # Convert various line break formats to markdown-friendly format
-            res = res.replace('\r\n', '\n').replace('\r', '\n')
-            
-            # Stream the response word by word for better UX
-            words = res.split()
-            buffer = []
-            
-            for i, word in enumerate(words):
-                buffer.append(word)
-                # Yield every 3 words or at the end
-                if len(buffer) == 3 or i == len(words) - 1:
-                    yield " ".join(buffer) + " "
-                    buffer = []
-                    time.sleep(0.05)
+            for line in self.normalize_markdown_response(res).splitlines(keepends=True):
+                yield line
+                time.sleep(0.03)
             
         except Exception as e:
             st.session_state.current_typing = False
