@@ -2,3 +2,4 @@ import os
 
 DEFAULT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "llm")
 DEFAULT_VECTOR_SIZE = int(os.getenv("QDRANT_VECTOR_SIZE", "1024"))
+DEFAULT_QDRANT_DISTANCE = os.getenv("QDRANT_DISTANCE", "DOT").upper()

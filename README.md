@@ -79,6 +79,7 @@ QDRANT_URL=http://qdrant-db:6333
 QDRANT_API_KEY=
 QDRANT_COLLECTION=llm
 QDRANT_VECTOR_SIZE=1024
+QDRANT_DISTANCE=DOT
 
 EMBEDDING_API_KEY=your_gemini_api_key
 EMBEDDING_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
@@ -129,6 +130,7 @@ export PROJECT_ID=<your-gcp-project-id>
 export REGION=asia-southeast1
 export QDRANT_URL=<your-qdrant-cloud-url>
 export QDRANT_VECTOR_SIZE=3072
+export QDRANT_DISTANCE=COSINE
 export MYSQL_USER=<cloud-sql-user>
 export MYSQL_DATABASE=demo_bot
 export CLOUD_SQL_CONNECTION_NAME=<project>:<region>:<instance>
@@ -139,11 +141,12 @@ export CLOUD_SQL_CONNECTION_NAME=<project>:<region>:<instance>
 Secrets nen dat bang Secret Manager, khong ghi vao Git:
 
 ```bash
-gcloud run services update legal-rag-backend \
-  --region "$REGION" \
-  --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_API_KEY=GEMINI_API_KEY:latest,QDRANT_API_KEY=QDRANT_API_KEY:latest,MYSQL_PASSWORD=MYSQL_PASSWORD:latest \
-  --project "$PROJECT_ID"
+GEMINI_SECRET=GEMINI_API_KEY
+QDRANT_SECRET=QDRANT_API_KEY
+MYSQL_PASSWORD_SECRET=MYSQL_PASSWORD
 ```
+
+`scripts/deploy_cloudrun_core.sh` se attach cac secret tren vao backend Cloud Run.
 
 Async extension sau khi core demo on dinh:
 
@@ -156,6 +159,19 @@ Script mau:
 ```bash
 ./scripts/deploy_cloudrun_worker.sh
 ```
+
+Index thu data len Qdrant Cloud bang Gemini embedding:
+
+```bash
+# Test nho truoc de tranh ton quota
+python3 scripts/index_qdrant_cloud.py --limit 100 --batch-size 16 --recreate
+
+# Khi da test OK moi tang limit hoac import day du
+python3 scripts/index_qdrant_cloud.py --limit 5000 --batch-size 16
+```
+
+Script nay doc secret tu `backend/.env`, tai dataset `anti-ai/ViNLI-Zalo-supervised/law_vi.jsonl.gz`,
+tao collection `llm` tren Qdrant Cloud va upsert vector 3072 chieu tu `gemini-embedding-001`.
 
 ## Chay model local tren Mac
 

@@ -177,6 +177,7 @@ QDRANT_URL=https://<your-qdrant-cloud-cluster>
 QDRANT_API_KEY=<secret>
 QDRANT_COLLECTION=llm
 QDRANT_VECTOR_SIZE=3072  # default for gemini-embedding-001
+QDRANT_DISTANCE=COSINE
 ```
 
 The backend should initialize Qdrant from environment variables.
@@ -256,6 +257,7 @@ QDRANT_URL=<qdrant-cloud-url>
 QDRANT_API_KEY=<secret>
 QDRANT_COLLECTION=llm
 QDRANT_VECTOR_SIZE=<embedding-dimension>
+QDRANT_DISTANCE=COSINE
 
 EMBEDDING_API_KEY=<secret>
 EMBEDDING_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/

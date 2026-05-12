@@ -12,7 +12,7 @@ from qdrant_client.models import (
     Range,
     VectorParams,
 )
-from configs import DEFAULT_VECTOR_SIZE
+from configs import DEFAULT_QDRANT_DISTANCE, DEFAULT_VECTOR_SIZE
 
 logger = logging.getLogger(__name__)
 QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant-db:6333")
@@ -21,13 +21,23 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or None
 client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 
 
+def get_qdrant_distance():
+    distances = {
+        "COSINE": Distance.COSINE,
+        "DOT": Distance.DOT,
+        "EUCLID": Distance.EUCLID,
+        "MANHATTAN": Distance.MANHATTAN,
+    }
+    return distances.get(DEFAULT_QDRANT_DISTANCE, Distance.DOT)
+
+
 def create_collection(name, vector_size=DEFAULT_VECTOR_SIZE):
     """
     Create a collection with enhanced configuration
     """
     return client.create_collection(
         collection_name=name,
-        vectors_config=VectorParams(size=vector_size, distance=Distance.DOT),
+        vectors_config=VectorParams(size=vector_size, distance=get_qdrant_distance()),
     )
 
 
