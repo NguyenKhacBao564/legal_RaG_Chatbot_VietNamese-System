@@ -7,7 +7,11 @@ import requests
 from openai import OpenAI
 from redis import InvalidResponse
 
-from custom_embedding import get_custom_embedding
+from custom_embedding import (
+    CUSTOM_EMBEDDING_ENABLED,
+    USE_OPENAI_FALLBACK,
+    get_custom_embedding,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +27,12 @@ CHAT_MODEL = (
     os.environ.get("GEMINI_MODEL")
     or os.environ.get("OPENAI_MODEL")
     or ("gemini-2.5-flash" if GEMINI_API_KEY else "gpt-4o-mini")
+)
+EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY") or CHAT_API_KEY
+EMBEDDING_BASE_URL = os.environ.get("EMBEDDING_BASE_URL") or CHAT_BASE_URL
+EMBEDDING_MODEL = (
+    os.environ.get("EMBEDDING_MODEL")
+    or ("gemini-embedding-001" if GEMINI_API_KEY else "text-embedding-3-small")
 )
 VIETNAMESE_LLM_API_URL = os.environ.get("VIETNAMESE_LLM_API_URL", "").strip()
 LOCAL_LLM_TIMEOUT = int(os.environ.get("LOCAL_LLM_TIMEOUT", "420"))
@@ -40,6 +50,16 @@ def get_openai_client():
 
 
 client = get_openai_client()
+
+
+def get_embedding_client():
+    client_kwargs = {"api_key": EMBEDDING_API_KEY or "missing-api-key"}
+    if EMBEDDING_BASE_URL:
+        client_kwargs["base_url"] = EMBEDDING_BASE_URL
+    return OpenAI(**client_kwargs)
+
+
+embedding_client = get_embedding_client()
 
 
 def vietnamese_llm_chat_complete(messages=(), temperature=0.7, max_tokens=4096, skip_local=False):
@@ -132,12 +152,28 @@ def openai_chat_complete(
 
 def get_embedding(text, model=None):
     """
-    Get embedding using custom Vietnamese legal model
-    Note: model parameter is kept for backward compatibility but not used
+    Get embedding for RAG retrieval.
+    Local/default mode uses the custom embedding service. Cloud Run demo can set
+    CUSTOM_EMBEDDING_ENABLED=false and use an OpenAI-compatible embedding API.
     """
     text = text.replace("\n", " ")
-    logger.info(f"� Using custom embedding model for text: {text[:100]}...")
-    return get_custom_embedding(text)
+
+    if CUSTOM_EMBEDDING_ENABLED:
+        try:
+            logger.info("Using custom embedding service for text: %s...", text[:100])
+            return get_custom_embedding(text)
+        except Exception:
+            if not USE_OPENAI_FALLBACK:
+                raise
+            logger.warning("Custom embedding failed; falling back to embedding API")
+
+    selected_model = model or EMBEDDING_MODEL
+    if not EMBEDDING_API_KEY:
+        raise RuntimeError("No embedding API key configured")
+
+    logger.info("Using embedding API model %s for text: %s...", selected_model, text[:100])
+    response = embedding_client.embeddings.create(input=text, model=selected_model)
+    return response.data[0].embedding
 
 
 def gen_doc_prompt(docs):

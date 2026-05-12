@@ -6,7 +6,7 @@
 echo "🚀 Starting Vietnamese Legal Chatbot Frontend..."
 
 # Set environment variables if not already set
-export STREAMLIT_SERVER_PORT=${STREAMLIT_SERVER_PORT:-8051}
+export STREAMLIT_SERVER_PORT=${STREAMLIT_SERVER_PORT:-${PORT:-8051}}
 export STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}
 export API_BASE_URL=${API_BASE_URL:-http://chatbot-api:8000}
 

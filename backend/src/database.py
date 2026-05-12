@@ -1,22 +1,39 @@
 import os
+from urllib.parse import quote_plus
 
 from celery import Celery
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 MYSQL_USER = os.getenv("MYSQL_USER", "root")
-MYSQL_PASSWORD = os.getenv("MYSQL_ROOT_PASSWORD")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD") or os.getenv("MYSQL_ROOT_PASSWORD", "")
 MYSQL_HOST = os.getenv("MYSQL_HOST", "0.0.0.0")
-MYSQL_PORT = os.getenv("MYSQL_PORT", "3308")
+MYSQL_PORT = os.getenv("MYSQL_PORT", "3306")
+MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "demo_bot")
+CLOUD_SQL_CONNECTION_NAME = os.getenv("CLOUD_SQL_CONNECTION_NAME", "").strip()
 
 # Celery settings
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379")
 
+def build_database_url():
+    configured_url = os.getenv("SQLALCHEMY_DATABASE_URL", "").strip()
+    if configured_url:
+        return configured_url
+
+    user = quote_plus(MYSQL_USER)
+    password = quote_plus(MYSQL_PASSWORD)
+    database = quote_plus(MYSQL_DATABASE)
+
+    if CLOUD_SQL_CONNECTION_NAME:
+        socket_path = quote_plus(f"/cloudsql/{CLOUD_SQL_CONNECTION_NAME}")
+        return f"mysql+pymysql://{user}:{password}@/{database}?unix_socket={socket_path}"
+
+    return f"mysql+pymysql://{user}:{password}@{MYSQL_HOST}:{MYSQL_PORT}/{database}"
+
+
 # MySQL database configuration
-SQLALCHEMY_DATABASE_URL = (
-    f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/demo_bot"
-)
+SQLALCHEMY_DATABASE_URL = build_database_url()
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, pool_pre_ping=True  # Improve connection resilience

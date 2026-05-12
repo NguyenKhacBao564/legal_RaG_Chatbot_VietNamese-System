@@ -56,9 +56,12 @@ Tao file `backend/.env` tu `backend/.env.template`, toi thieu can cac bien sau:
 
 ```env
 MYSQL_USER=root
+MYSQL_PASSWORD=
 MYSQL_ROOT_PASSWORD=change_me
+MYSQL_DATABASE=demo_bot
 MYSQL_HOST=mariadb-tiny
 MYSQL_PORT=3306
+CLOUD_SQL_CONNECTION_NAME=
 
 CELERY_BROKER_URL=redis://valkey-db:6379
 CELERY_RESULT_BACKEND=redis://valkey-db:6379
@@ -71,6 +74,15 @@ GEMINI_MODEL=gemini-2.5-flash
 OPENAI_API_KEY=your_gemini_api_key
 OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 OPENAI_MODEL=gemini-2.5-flash
+
+QDRANT_URL=http://qdrant-db:6333
+QDRANT_API_KEY=
+QDRANT_COLLECTION=llm
+QDRANT_VECTOR_SIZE=1024
+
+EMBEDDING_API_KEY=your_gemini_api_key
+EMBEDDING_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+EMBEDDING_MODEL=gemini-embedding-001
 
 CUSTOM_EMBEDDING_API_URL=http://your-embedding-host:5001
 CUSTOM_EMBEDDING_ENABLED=true
@@ -85,10 +97,65 @@ ENABLE_LLM_REPHRASE=false
 ENABLE_LLM_ROUTER=false
 ENABLE_LLM_QUERY_REWRITE=false
 ENABLE_LLM_SUMMARY=false
+FORCE_SYNC_CHAT=false
 TASK_TIMEOUT=420
 ```
 
 Khong commit cac file `.env`. Chung da duoc ignore.
+
+## Cloud Run core demo
+
+Core deploy path cho portfolio/interview:
+
+```text
+Cloud Run frontend + Cloud Run backend + Qdrant Cloud + Cloud SQL + Gemini API
+```
+
+Repo da co cac thay doi can thiet cho Cloud Run:
+
+- Backend doc bien `PORT` cua Cloud Run.
+- Frontend doc `API_BASE_URL` thay vi hard-code Docker hostname.
+- Qdrant doc `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`.
+- Query-time embedding co the dung custom embedding service hoac Gemini/OpenAI-compatible embedding API.
+- Backend co `FORCE_SYNC_CHAT=true` de demo core khong bat buoc chay Celery worker.
+- Cloud SQL co the cau hinh qua `MYSQL_*` hoac `CLOUD_SQL_CONNECTION_NAME`.
+
+Luu y: embedding model dung luc import/index va luc query phai giong nhau. Neu doi tu custom embedding sang Gemini embedding, can tao lai collection Qdrant voi `QDRANT_VECTOR_SIZE` phu hop va import lai vector.
+
+Script build/deploy mau:
+
+```bash
+export PROJECT_ID=<your-gcp-project-id>
+export REGION=asia-southeast1
+export QDRANT_URL=<your-qdrant-cloud-url>
+export QDRANT_VECTOR_SIZE=3072
+export MYSQL_USER=<cloud-sql-user>
+export MYSQL_DATABASE=demo_bot
+export CLOUD_SQL_CONNECTION_NAME=<project>:<region>:<instance>
+
+./scripts/deploy_cloudrun_core.sh
+```
+
+Secrets nen dat bang Secret Manager, khong ghi vao Git:
+
+```bash
+gcloud run services update legal-rag-backend \
+  --region "$REGION" \
+  --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_API_KEY=GEMINI_API_KEY:latest,QDRANT_API_KEY=QDRANT_API_KEY:latest,MYSQL_PASSWORD=MYSQL_PASSWORD:latest \
+  --project "$PROJECT_ID"
+```
+
+Async extension sau khi core demo on dinh:
+
+```text
+Cloud Run worker + Celery + Memorystore Redis/Valkey-compatible broker + Cloud Storage
+```
+
+Script mau:
+
+```bash
+./scripts/deploy_cloudrun_worker.sh
+```
 
 ## Chay model local tren Mac
 

@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from qdrant_client import QdrantClient
@@ -11,12 +12,16 @@ from qdrant_client.models import (
     Range,
     VectorParams,
 )
+from configs import DEFAULT_VECTOR_SIZE
 
 logger = logging.getLogger(__name__)
-client = QdrantClient(url="http://qdrant-db:6333")
+QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant-db:6333")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or None
+
+client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
 
 
-def create_collection(name, vector_size=1024):
+def create_collection(name, vector_size=DEFAULT_VECTOR_SIZE):
     """
     Create a collection with enhanced configuration
     """

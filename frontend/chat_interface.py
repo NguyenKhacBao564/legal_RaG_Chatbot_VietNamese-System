@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import time
 
 import requests
@@ -12,18 +13,20 @@ st.title("Chatbot UI")
 # Input bot
 bot_id = "botFinance"
 user_id = "1"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://chatbot-api:8000").rstrip("/")
+CHAT_SYNC_REQUEST = os.getenv("CHAT_SYNC_REQUEST", "true").lower() == "true"
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=20))
 def send_user_request(text):
-    url = f"http://chatbot-api:8000/chat/complete"
+    url = f"{API_BASE_URL}/chat/complete"
 
     payload = json.dumps(
         {
             "user_message": text,
             "user_id": str(user_id),
             "bot_id": bot_id,
-            "sync_request": False,
+            "sync_request": CHAT_SYNC_REQUEST,
         }
     )
     headers = {"Content-Type": "application/json"}
@@ -36,7 +39,7 @@ def send_user_request(text):
 
 @retry(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=1, min=4, max=20))
 def get_bot_response(request_id):
-    url = f"http://chatbot-api:8000/chat/complete/{request_id}"
+    url = f"{API_BASE_URL}/chat/complete/{request_id}"
 
     response = requests.request("GET", url, headers={}, data="", timeout=30)
     if response.status_code != 200:
@@ -47,6 +50,9 @@ def get_bot_response(request_id):
 @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=4, max=20))
 def get_chat_complete(text):
     user_request = send_user_request(text)
+    if "response" in user_request:
+        return str(user_request["response"])
+
     request_id = user_request["task_id"]
     status_code, chat_response = get_bot_response(request_id)
     if status_code == 200:

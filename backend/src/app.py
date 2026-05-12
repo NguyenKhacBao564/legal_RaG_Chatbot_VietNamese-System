@@ -15,6 +15,7 @@ from vectorize import create_collection
 
 # Constants
 TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT", "420"))
+FORCE_SYNC_CHAT = os.getenv("FORCE_SYNC_CHAT", "false").lower() == "true"
 POLLING_INTERVAL = 0.5
 
 setup_logging()
@@ -53,7 +54,7 @@ async def complete(data: CompleteRequest):
             status_code=400, detail="User id and user message are required"
         )
 
-    if data.sync_request:
+    if data.sync_request or FORCE_SYNC_CHAT:
         response = llm_handle_message(bot_id, user_id, user_message)
         return {"response": str(response)}
     else:
@@ -118,4 +119,10 @@ async def import_qa_data_endpoint():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app:app", host="0.0.0.0", port=8002, workers=2, log_level="info")
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "8080")),
+        workers=int(os.getenv("WEB_CONCURRENCY", "1")),
+        log_level="info",
+    )

@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import time
 import datetime
 from typing import List, Dict, Any
@@ -289,7 +290,8 @@ st.markdown("""
 # App configuration
 BOT_ID = "botFinance"
 USER_ID = "1"
-API_BASE_URL = "http://chatbot-api:8000"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://chatbot-api:8000").rstrip("/")
+CHAT_SYNC_REQUEST = os.getenv("CHAT_SYNC_REQUEST", "true").lower() == "true"
 
 class ChatApp:
     def __init__(self):
@@ -314,7 +316,7 @@ class ChatApp:
             "user_message": text,
             "user_id": str(USER_ID),
             "bot_id": BOT_ID,
-            "sync_request": False,
+            "sync_request": CHAT_SYNC_REQUEST,
         }
         headers = {"Content-Type": "application/json"}
         
@@ -397,6 +399,9 @@ class ChatApp:
         """Complete chat interaction"""
         try:
             user_request = self.send_user_request(text)
+            if "response" in user_request:
+                return self.format_content_for_display(str(user_request["response"]))
+
             # Validate user_request
             if not user_request or not isinstance(user_request, dict) or "task_id" not in user_request:
                 logger.error(f"Invalid user_request response: {user_request}")

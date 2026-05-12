@@ -17,8 +17,8 @@ echo "=== End Debug Info ==="
 # If no command is provided, start the FastAPI server
 if [ $# -eq 0 ]; then
     echo "Starting FastAPI server..."
-    echo "Trying to run: uvicorn src.app:app --host 0.0.0.0 --port 8000"
-    exec uvicorn src.app:app --host 0.0.0.0 --port 8000
+    echo "Trying to run: uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080}"
+    exec uvicorn app:app --host 0.0.0.0 --port "${PORT:-8080}"
 else
     echo "Running custom command: $@"
     exec "$@"
