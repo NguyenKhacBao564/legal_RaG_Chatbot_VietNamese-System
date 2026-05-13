@@ -1,0 +1,126 @@
+%------------------------------------------------------
+% Harvard-style one-page resume -- NGUYEN KHAC BAO
+% Target: Fullstack AI Integration Intern @ FPT Telecom
+% Compile: pdflatex CV_Nguyen_Khac_Bao_FPT_Fullstack_AI_Integration_Intern.tex
+%------------------------------------------------------
+
+\documentclass[10pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper,top=0.38in,bottom=0.38in,left=0.52in,right=0.52in]{geometry}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{microtype}
+\usepackage{xcolor}
+
+\hypersetup{
+    colorlinks=true,
+    urlcolor=blue,
+    linkcolor=black,
+    pdfborder={0 0 0}
+}
+
+\titleformat{\section}
+    {\normalfont\large\bfseries}
+    {}
+    {0em}
+    {}
+    [\vspace{1pt}\titlerule]
+
+\titlespacing*{\section}{0pt}{4pt}{2pt}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\pagestyle{empty}
+\sloppy
+
+\newenvironment{cvitems}{%
+    \begin{itemize}[leftmargin=1.2em,itemsep=0pt,topsep=1pt,parsep=0pt]
+}{%
+    \end{itemize}
+}
+
+\newcommand{\entryhead}[2]{%
+    \noindent\textbf{#1}\hfill #2\\[-2pt]
+}
+
+\newcommand{\entrysub}[1]{%
+    \noindent\textit{#1}\\[-1pt]
+}
+
+\begin{document}
+\fontsize{9.05}{10.0}\selectfont
+
+\begin{center}
+    {\Large\textbf{NGUYEN KHAC BAO}}\\[-1pt]
+    Fullstack AI Integration Intern\\[2pt]
+    Ho Chi Minh City, Vietnam
+    \,\textbar\,
+    \href{mailto:nguyenkhacbaowork564@gmail.com}{nguyenkhacbaowork564@gmail.com}
+    \,\textbar\,
+    (+84) 039 586 4429
+    \,\textbar\,
+    \href{https://github.com/NguyenKhacBao564}{github.com/NguyenKhacBao564}
+\end{center}
+
+\section{CAREER OBJECTIVE}
+AI integration intern candidate focused on turning AI models into usable products through backend APIs, RAG pipelines, vector databases, Docker, and cloud deployment. Hands-on with FastAPI, Streamlit, Gemini API, Qdrant Cloud, Cloud SQL, and Cloud Run for deployable AI demos.
+
+\section{EDUCATION}
+\entryhead{Posts and Telecommunications Institute of Technology (PTIT)}{2022 -- 2027}
+\entrysub{Bachelor of Information Technology}
+Relevant Coursework: Machine Learning, Deep Learning, Computer Vision.
+
+\section{TECHNICAL SKILLS}
+\textbf{AI Integration:} RAG pipelines, Gemini API, embeddings, prompt engineering, OpenAI-compatible APIs, LLM endpoint integration\\
+\textbf{Backend / Cloud:} FastAPI, REST API, WebSocket, Docker, Google Cloud Run, Cloud SQL, Secret Manager, AWS EC2, Vast.ai GPU\\
+\textbf{Databases:} Qdrant Cloud, MySQL/Cloud SQL, SQL basics, JSON/CSV data processing\\
+\textbf{Frontend:} Streamlit, browser webcam demo, basic HTML/JavaScript\\
+\textbf{ML / CV:} PyTorch, YOLOv8n, OpenCV, OCR, multi-object tracking, dataset QA\\
+\textbf{Tools:} Git/GitHub, Linux, Cloud Build, Artifact Registry
+
+\section{LANGUAGES}
+Vietnamese: Native \textbar\ English: Technical reading proficiency for documentation, model cards, API references, and engineering articles.
+
+\section{PROJECTS}
+\entryhead{Vietnamese Legal RAG Chatbot}{2026}
+\entrysub{Personal Project \textbar\ Python, FastAPI, Streamlit, Gemini API, Qdrant Cloud, Cloud SQL, Docker, Google Cloud Run \textbar\ Source: \href{https://github.com/NguyenKhacBao564/legal_RaG_Chatbot_VietNamese-System}{GitHub}}
+\begin{cvitems}
+    \item Built a cloud-ready fullstack RAG product demo with a Streamlit frontend and FastAPI backend deployed as separate Google Cloud Run services.
+    \item Integrated Gemini as the default LLM and embedding provider; indexed the full 32,980-record Vietnamese legal QA dataset into Qdrant Cloud for retrieval-based answers.
+    \item Used Cloud SQL/MySQL for chat history and environment-based configuration with Secret Manager for API keys and database credentials.
+    \item Designed optional extensions for async document indexing with Celery/Redis-compatible broker and fine-tuned Vietnamese legal LLM serving through an OpenAI-compatible endpoint.
+\end{cvitems}
+
+\entryhead{Real-Time Face Mask Compliance Detection System}{2026}
+\entrysub{Personal Project \textbar\ Python, FastAPI, WebSocket, YOLOv8n, OpenCV, Docker, Google Cloud Run \textbar\ Source: \href{https://github.com/NguyenKhacBao564/Real-Time-Face-Mask-Compliance-Detection-System}{GitHub}}
+\begin{cvitems}
+    \item Built and deployed an AI inference service with FastAPI REST + WebSocket endpoints and a browser webcam frontend running over Cloud Run HTTPS/WSS.
+    \item Containerized the service for Cloud Run and logged warm endpoint latency around 151 ms for REST and 127 ms for WSS in the demo environment.
+    \item Trained a YOLOv8n 3-class mask model on PWMFD converted from VOC to YOLO format: 9,205 images, 18,528 labeled instances, 0.970 mAP@50 validation.
+\end{cvitems}
+
+\entryhead{Traffic Violation Detection \& License Plate Recognition}{2026}
+\entrysub{Personal Project \textbar\ Python, OpenCV, Ultralytics YOLO, ByteTrack, HyperLPR3, JSON \textbar\ Source: \href{https://github.com/NguyenKhacBao564/Traffic-Violation-Detection-and-License-Plate-Recognition}{GitHub}}
+\begin{cvitems}
+    \item Built an AI video analytics pipeline for vehicle detection/tracking, traffic-light state estimation, stop-line event logic, plate OCR, and JSON evidence bundles.
+    \item Prepared a compact CCPD2019 plate dataset with annotation parsing, YOLO bbox conversion, train/val/test split, negative samples, OCR crops, and QA reports.
+    \item Fine-tuned a YOLO plate detector on 8,598 images, achieving 0.989 precision, 0.998 recall, and 0.994 mAP50 on validation.
+\end{cvitems}
+
+\entryhead{Autofall Labeler Tool}{2026}
+\entrysub{Additional Project \textbar\ Python, Streamlit, OpenCV, YOLO-Pose, Pandas \textbar\ Source: \href{https://github.com/NguyenKhacBao564/autofall-labeler-tool}{GitHub}}
+\begin{cvitems}
+    \item Built a human-in-the-loop dataset assistant with Streamlit review UI, metadata/annotation management, YOLO-Pose keypoints, QA reports, and reviewed-only export.
+    \item Designed CSV-based source-of-truth records for annotations, metadata, keypoints, and review events to handle noisy CCTV data and reproducible dataset versioning.
+    \item Achieved 90.2\% coarse fall/non-fall agreement on a reviewed benchmark while identifying exact action-label accuracy as a limitation of weak temporal modeling.
+\end{cvitems}
+
+\section{ACTIVITIES}
+\entryhead{AI Research Group -- University Club}{2025 -- Present}
+\entrysub{Member}
+Discussed Machine Learning, Deep Learning, Computer Vision, and AI application development.
+
+\end{document}

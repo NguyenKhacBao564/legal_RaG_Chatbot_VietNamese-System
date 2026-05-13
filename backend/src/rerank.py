@@ -9,7 +9,7 @@ import requests
 # Set up your cohere client
 COHERE_API_KEY = os.environ.get("COHERE_API_KEY")
 DEFAULT_RANK_MODEL = "rerank-multilingual-v3.0"
-co = cohere.Client(COHERE_API_KEY)
+co = cohere.Client(COHERE_API_KEY) if COHERE_API_KEY else None
 
 
 def rerank_documents(docs, query, top_n=3, rank_model=DEFAULT_RANK_MODEL):
@@ -26,7 +26,7 @@ def rerank_documents(docs, query, top_n=3, rank_model=DEFAULT_RANK_MODEL):
         return docs[:top_n]
 
     # Kiểm tra API key
-    if not COHERE_API_KEY:
+    if not co:
         print("[RERANK] COHERE_API_KEY not found, returning original docs")
         return docs[:top_n]
 

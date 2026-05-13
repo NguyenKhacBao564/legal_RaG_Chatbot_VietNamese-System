@@ -4,6 +4,15 @@ He thong chatbot tu van phap luat Viet Nam su dung FastAPI, Streamlit, Celery,
 MariaDB, Valkey, Qdrant va LLM OpenAI-compatible. Du an co the chay voi Gemini
 API hoac model local fine-tuned cua ban qua endpoint `/v1/chat/completions`.
 
+## Live demo
+
+- Frontend demo: <https://legal-rag-frontend-szbjef7jsa-as.a.run.app>
+- Backend health check: <https://legal-rag-backend-szbjef7jsa-as.a.run.app/health>
+
+Demo dang chay theo core deployment: Cloud Run frontend, Cloud Run backend,
+Qdrant Cloud, Cloud SQL va Gemini API. Ban demo public co the duoc tam dung khi
+khong trong giai doan ung tuyen de kiem soat chi phi cloud.
+
 ## Tinh nang chinh
 
 - Giao dien chat bang Streamlit.
