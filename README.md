@@ -8,10 +8,16 @@ API hoac model local fine-tuned cua ban qua endpoint `/v1/chat/completions`.
 
 - Frontend demo: <https://legal-rag-frontend-szbjef7jsa-as.a.run.app>
 - Backend health check: <https://legal-rag-backend-szbjef7jsa-as.a.run.app/health>
+- Backend readiness check: <https://legal-rag-backend-szbjef7jsa-as.a.run.app/ready>
+- API streaming endpoint: `POST https://legal-rag-backend-szbjef7jsa-as.a.run.app/chat/stream`
 
 Demo dang chay theo core deployment: Cloud Run frontend, Cloud Run backend,
 Qdrant Cloud, Cloud SQL va Gemini API. Ban demo public co the duoc tam dung khi
 khong trong giai doan ung tuyen de kiem soat chi phi cloud.
+
+Last Cloud Run redeploy smoke test: 2026-05-30. `/health` and `/chat/stream`
+returned successfully; `/ready` should be used to inspect current dependency
+status such as Qdrant collection availability and chat provider configuration.
 
 ## Tinh nang chinh
 
