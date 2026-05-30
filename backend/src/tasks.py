@@ -17,6 +17,7 @@ from brain import (
 from configs import DEFAULT_COLLECTION_NAME
 from database import get_celery_app
 from models import get_conversation_messages, update_chat_conversation
+from pipeline import handle_chat_message
 from query_rewriter import rewrite_query_to_multi_queries, rewrite_query_with_context
 from rerank import rerank_documents
 from search import hybrid_search
@@ -320,31 +321,4 @@ def llm_handle_message(bot_id, user_id, question):
     3. Route to appropriate handler (RAG, web search, or general chat)
     4. Generate and save response
     """
-    logger.info("Start handle message")
-
-    # Update chat conversation
-    conversation_id = update_chat_conversation(bot_id, user_id, question, True)
-    logger.info("Conversation id: %s", conversation_id)
-
-    # Convert history to list messages
-    messages = get_conversation_messages(conversation_id)
-    logger.info("Conversation messages: %s", messages)
-    history = messages[:-1]
-
-    # Use intelligent routing to handle the question
-    # This will automatically choose between RAG, web search, or general chat
-    response = bot_route_answer_message(history, question)
-    logger.info(f"Chatbot response generated")
-
-    # Summarize response for storage (optional, can be disabled if not needed)
-    try:
-        summarized_response = get_summarized_response(response)
-    except Exception as e:
-        logger.warning(f"Failed to summarize response: {e}, using original")
-        summarized_response = response
-
-    # Save response to history
-    update_chat_conversation(bot_id, user_id, summarized_response, False)
-
-    # Return full response
-    return {"role": "assistant", "content": response}
+    return handle_chat_message(bot_id, user_id, question)

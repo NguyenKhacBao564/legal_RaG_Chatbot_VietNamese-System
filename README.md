@@ -79,6 +79,7 @@ GEMINI_API_KEY=your_gemini_api_key
 GOOGLE_API_KEY=your_gemini_api_key
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 GEMINI_MODEL=gemini-2.5-flash
+CHAT_API_TIMEOUT=120
 
 OPENAI_API_KEY=your_gemini_api_key
 OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
@@ -93,6 +94,7 @@ QDRANT_DISTANCE=DOT
 EMBEDDING_API_KEY=your_gemini_api_key
 EMBEDDING_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 EMBEDDING_MODEL=gemini-embedding-001
+EMBEDDING_API_TIMEOUT=60
 
 CUSTOM_EMBEDDING_API_URL=http://your-embedding-host:5001
 CUSTOM_EMBEDDING_ENABLED=true
@@ -168,6 +170,215 @@ Script mau:
 ```bash
 ./scripts/deploy_cloudrun_worker.sh
 ```
+
+## System & App Improvements for Full-stack AI Integration
+
+### Architecture summary
+
+Core chat flow:
+
+```text
+Streamlit frontend
+  -> FastAPI backend
+  -> save user message to Cloud SQL/MySQL
+  -> route intent: legal_rag / agent_tools / web_search / general_chat
+  -> retrieve legal context from Qdrant Cloud
+  -> rerank documents when Cohere key is available
+  -> build grounded prompt
+  -> call Gemini/OpenAI-compatible LLM
+  -> save assistant response
+  -> return answer to frontend
+```
+
+The default deployable demo stays lightweight: Cloud Run frontend, Cloud Run
+backend, Qdrant Cloud, Cloud SQL and Gemini API. Celery/Redis-compatible worker
+code remains available for async document import and indexing.
+
+### Chat API endpoints
+
+Existing synchronous/asynchronous endpoint:
+
+```text
+POST /chat/complete
+```
+
+Request body:
+
+```json
+{
+  "user_id": "demo-user",
+  "bot_id": "botLawyer",
+  "user_message": "Người lao động nghỉ việc cần báo trước bao nhiêu ngày?",
+  "sync_request": true
+}
+```
+
+New API-level streaming endpoint:
+
+```text
+POST /chat/stream
+```
+
+The streaming endpoint returns `text/event-stream` events:
+
+- `start`: request accepted.
+- `metadata`: assistant metadata and streaming mode.
+- `delta`: simulated response chunks.
+- `done`: full final answer.
+- `error`: Vietnamese error message if the pipeline fails.
+
+Provider-native token streaming is not enabled by default. The endpoint uses
+safe simulated streaming by generating the final answer through the same RAG
+pipeline, then splitting it into chunks. This keeps `/chat/complete` unchanged
+and avoids provider-specific streaming breakage.
+
+### Latency logging
+
+Backend logs one structured JSON metric line per handled chat request:
+
+```text
+rag_pipeline_metrics={
+  "route": "legal_rag",
+  "route_detection_ms": 3,
+  "retrieval_ms": 812,
+  "rerank_ms": 0,
+  "llm_generation_ms": 2410,
+  "total_request_ms": 3560,
+  "fallback_used": false,
+  "fallback_reasons": []
+}
+```
+
+Tracked fields:
+
+- `route_detection_ms`
+- `retrieval_ms`
+- `rerank_ms`
+- `llm_generation_ms`
+- `total_request_ms`
+- `fallback_used`
+- `fallback_reasons`
+- `route`
+
+This is intentionally simple Python logging, suitable for Cloud Run logs and
+local debugging without adding a heavy observability stack.
+
+### Fallback behavior
+
+The backend now handles these cases without crashing:
+
+- Qdrant collection unavailable.
+- Qdrant collection empty.
+- Retrieval returns no relevant documents.
+- Rerank fails or `COHERE_API_KEY` is missing.
+- LLM provider timeout/API error.
+- Cloud SQL/MySQL chat history is temporarily unavailable.
+
+When RAG context is unavailable, the answer explicitly warns in Vietnamese that
+it is based on general model knowledge and should be verified with legal
+sources or a legal professional.
+
+### Health and readiness
+
+Existing liveness endpoint:
+
+```text
+GET /health
+```
+
+Readiness endpoint:
+
+```text
+GET /ready
+```
+
+`/ready` checks basic chat-provider configuration and Qdrant collection status.
+It returns JSON with dependency status and is designed to stay lightweight.
+
+### How to run locally
+
+Run the backend and frontend with Docker as usual:
+
+```bash
+cd database && docker compose up -d
+cd ../backend && docker compose up -d --build
+cd ../frontend && docker compose up -d --build
+```
+
+For local synchronous demo without a Celery worker:
+
+```env
+FORCE_SYNC_CHAT=true
+CHAT_SYNC_REQUEST=true
+```
+
+Frontend defaults to `/chat/complete`. To test API-level SSE streaming from the
+Streamlit app, set:
+
+```env
+CHAT_STREAMING_ENABLED=true
+```
+
+### How to test with curl
+
+Health:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Readiness:
+
+```bash
+curl http://localhost:8000/ready
+```
+
+Synchronous chat:
+
+```bash
+curl -X POST http://localhost:8000/chat/complete \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "demo-user",
+    "bot_id": "botLawyer",
+    "user_message": "Người lao động nghỉ việc cần báo trước bao nhiêu ngày?",
+    "sync_request": true
+  }'
+```
+
+Streaming chat:
+
+```bash
+curl -N -X POST http://localhost:8000/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "demo-user",
+    "bot_id": "botLawyer",
+    "user_message": "Người lao động nghỉ việc cần báo trước bao nhiêu ngày?"
+  }'
+```
+
+### Cloud Run deployment notes
+
+- Keep secrets in Secret Manager, not in `.env` or source code.
+- Set `FORCE_SYNC_CHAT=true` for the lightweight Cloud Run backend demo if no
+  Celery worker is deployed.
+- Keep frontend and backend as separate Cloud Run services.
+- Use `API_BASE_URL` on the frontend to point to the backend service URL.
+- Use `/ready` for readiness checks and `/health` for basic liveness checks.
+- Cloud SQL can be stopped outside demo periods to reduce cost, but chat history
+  persistence will be unavailable while it is stopped.
+
+### Why these changes help
+
+- SSE streaming improves perceived chatbot responsiveness for API clients and
+  can be enabled in the Streamlit frontend without redesigning the UI.
+- Structured latency logs make it easier to explain and debug the RAG pipeline:
+  routing, retrieval, reranking, LLM generation and total request time.
+- Clear Vietnamese fallbacks prevent user-facing crashes when Qdrant, rerank,
+  LLM or Cloud SQL dependencies are unavailable.
+- `/ready` separates backend liveness from dependency readiness, which is useful
+  for Cloud Run deployment and interview discussion.
 
 Index thu data len Qdrant Cloud bang Gemini embedding:
 

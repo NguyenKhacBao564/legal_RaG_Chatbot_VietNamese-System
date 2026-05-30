@@ -292,6 +292,7 @@ BOT_ID = "botFinance"
 USER_ID = "1"
 API_BASE_URL = os.getenv("API_BASE_URL", "http://chatbot-api:8000").rstrip("/")
 CHAT_SYNC_REQUEST = os.getenv("CHAT_SYNC_REQUEST", "true").lower() == "true"
+CHAT_STREAMING_ENABLED = os.getenv("CHAT_STREAMING_ENABLED", "false").lower() == "true"
 
 class ChatApp:
     def __init__(self):
@@ -449,10 +450,67 @@ class ChatApp:
             logger.error(f"Chat completion error: {e}")
             return f"Xin lỗi, đã có lỗi xảy ra: {str(e)}. Vui lòng thử lại."
 
+    def stream_chat_complete(self, text: str):
+        """Stream chat chunks from the backend SSE endpoint."""
+        url = f"{API_BASE_URL}/chat/stream"
+        payload = {
+            "user_message": text,
+            "user_id": str(USER_ID),
+            "bot_id": BOT_ID,
+        }
+        headers = {"Content-Type": "application/json"}
+        current_event = None
+
+        try:
+            with requests.post(
+                url, json=payload, headers=headers, timeout=900, stream=True
+            ) as response:
+                if response.status_code != 200:
+                    logger.error(
+                        f"stream_chat_complete non-200 status: {response.status_code} body: {response.text}"
+                    )
+                    yield "Xin lỗi, hệ thống streaming đang gặp lỗi. Vui lòng thử lại."
+                    return
+
+                for raw_line in response.iter_lines(decode_unicode=True):
+                    if not raw_line:
+                        continue
+                    if raw_line.startswith("event:"):
+                        current_event = raw_line.split(":", 1)[1].strip()
+                        continue
+                    if not raw_line.startswith("data:"):
+                        continue
+
+                    try:
+                        data = json.loads(raw_line.split(":", 1)[1].strip())
+                    except ValueError:
+                        logger.warning(f"Invalid SSE data line: {raw_line}")
+                        continue
+
+                    if current_event == "delta":
+                        yield data.get("content", "")
+                    elif current_event == "error":
+                        yield data.get(
+                            "message",
+                            "Xin lỗi, hệ thống đang gặp lỗi khi tạo câu trả lời.",
+                        )
+                        return
+                    elif current_event == "done":
+                        return
+        except Exception as e:
+            logger.error(f"Streaming chat completion error: {e}")
+            yield f"Xin lỗi, đã có lỗi xảy ra khi streaming: {str(e)}"
+
     def response_generator(self, user_message: str):
         """Generate streaming response"""
         try:
             st.session_state.current_typing = True
+            if CHAT_STREAMING_ENABLED:
+                for chunk in self.stream_chat_complete(user_message):
+                    yield chunk
+                st.session_state.current_typing = False
+                return
+
             res = self.get_chat_complete(user_message)
             st.session_state.current_typing = False
             
@@ -653,10 +711,24 @@ class ChatApp:
             # Display assistant response
             with st.chat_message("assistant"):
                 try:
-                    # Get complete response first
-                    complete_response = self.get_chat_complete(prompt)
-                    # Split and display each numbered item separately
-                    self.display_formatted_content(complete_response)
+                    if CHAT_STREAMING_ENABLED:
+                        chunks = []
+
+                        def ui_stream():
+                            for chunk in self.response_generator(prompt):
+                                chunks.append(chunk)
+                                yield chunk
+
+                        st.write_stream(ui_stream())
+                        complete_response = self.normalize_markdown_response(
+                            "".join(chunks)
+                        )
+                    else:
+                        # Get complete response first
+                        complete_response = self.get_chat_complete(prompt)
+                        # Split and display each numbered item separately
+                        self.display_formatted_content(complete_response)
+
                     response_timestamp = datetime.datetime.now().strftime("%H:%M - %d/%m/%Y")
                     st.caption(f"🕐 {response_timestamp}")
                     

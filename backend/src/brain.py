@@ -28,12 +28,14 @@ CHAT_MODEL = (
     or os.environ.get("OPENAI_MODEL")
     or ("gemini-2.5-flash" if GEMINI_API_KEY else "gpt-4o-mini")
 )
+CHAT_API_TIMEOUT = float(os.environ.get("CHAT_API_TIMEOUT", "120"))
 EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY") or CHAT_API_KEY
 EMBEDDING_BASE_URL = os.environ.get("EMBEDDING_BASE_URL") or CHAT_BASE_URL
 EMBEDDING_MODEL = (
     os.environ.get("EMBEDDING_MODEL")
     or ("gemini-embedding-001" if GEMINI_API_KEY else "text-embedding-3-small")
 )
+EMBEDDING_API_TIMEOUT = float(os.environ.get("EMBEDDING_API_TIMEOUT", "60"))
 VIETNAMESE_LLM_API_URL = os.environ.get("VIETNAMESE_LLM_API_URL", "").strip()
 LOCAL_LLM_TIMEOUT = int(os.environ.get("LOCAL_LLM_TIMEOUT", "420"))
 LOCAL_LLM_MAX_TOKENS = int(os.environ.get("LOCAL_LLM_MAX_TOKENS", "384"))
@@ -43,7 +45,10 @@ ENABLE_LLM_ROUTER = os.environ.get("ENABLE_LLM_ROUTER", "false").lower() == "tru
 
 
 def get_openai_client():
-    client_kwargs = {"api_key": CHAT_API_KEY or "missing-api-key"}
+    client_kwargs = {
+        "api_key": CHAT_API_KEY or "missing-api-key",
+        "timeout": CHAT_API_TIMEOUT,
+    }
     if CHAT_BASE_URL:
         client_kwargs["base_url"] = CHAT_BASE_URL
     return OpenAI(**client_kwargs)
@@ -53,7 +58,10 @@ client = get_openai_client()
 
 
 def get_embedding_client():
-    client_kwargs = {"api_key": EMBEDDING_API_KEY or "missing-api-key"}
+    client_kwargs = {
+        "api_key": EMBEDDING_API_KEY or "missing-api-key",
+        "timeout": EMBEDDING_API_TIMEOUT,
+    }
     if EMBEDDING_BASE_URL:
         client_kwargs["base_url"] = EMBEDDING_BASE_URL
     return OpenAI(**client_kwargs)
