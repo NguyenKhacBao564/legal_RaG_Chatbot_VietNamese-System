@@ -98,6 +98,16 @@ asset/*.gif
 *.rar
 *.7z
 
+# Personal CV/application materials
+cv/
+CV_*.pdf
+CV_*.tex
+CoverLetter_*.pdf
+CoverLetter_*.tex
+PlanfordeployChatbot.md
+*.aux
+*.out
+
 # Node/frontend
 node_modules/
 .next/
